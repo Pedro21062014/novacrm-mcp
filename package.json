@@ -1,0 +1,44 @@
+{
+  "name": "novacrm-mcp",
+  "version": "1.1.0",
+  "description": "Servidor MCP (Model Context Protocol) oficial do NovaCRM — conecta IAs como Claude Desktop, Cursor, Claude Code e Gemini CLI à sua loja através da API pública v1.",
+  "type": "module",
+  "main": "index.mjs",
+  "bin": {
+    "novacrm-mcp": "./index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "novacrm",
+    "crm",
+    "ai",
+    "claude",
+    "cursor",
+    "gemini",
+    "claude-code",
+    "e-commerce"
+  ],
+  "author": "NovaCRM",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pedro21062014/novacrm-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Pedro21062014/novacrm-mcp/issues"
+  },
+  "homepage": "https://console.novacrm.com.br",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node test/e2e.mjs"
+  }
+}

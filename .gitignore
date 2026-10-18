@@ -1,0 +1,13 @@
+# Dependências / build
+node_modules/
+.npmrc
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
