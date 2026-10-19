@@ -8,7 +8,7 @@ tudo através da **API pública v1** do NovaCRM, autenticado pela chave de API
 da loja.
 
 - **Zero dependências**: JSON-RPC 2.0 sobre STDIO implementado na mão (Node ≥ 18).
-- **49 ferramentas** cobrindo o dia a dia da loja + **2 prompts prontos**.
+- **50 ferramentas** cobrindo o dia a dia da loja + **3 prompts prontos**.
 - **Escopos respeitados**: a chave define o que a IA pode fazer (leitura e/ou
   escrita), e os limites do plano e o rate limit valem normalmente.
 
@@ -109,12 +109,13 @@ Adicione ao `settings.json` do Gemini CLI:
 Qualquer cliente MCP com transporte STDIO funciona: aponte o comando para
 `npx novacrm-mcp` com a variável `NOVACRM_API_KEY`.
 
-## Ferramentas disponíveis (49)
+## Ferramentas disponíveis (50)
 
 | Grupo | Ferramentas |
 | --- | --- |
 | Diagnóstico | `novacrm_ping` |
-| Métricas | `novacrm_get_metrics` (overview / revenue / orders / products / clients / inventory) |
+| Métricas | `novacrm_get_metrics` (overview / revenue / orders / products / clients / inventory / visits) |
+| Visitas | `novacrm_get_store_visits` (visitantes únicos, produtos mais vistos, dispositivos, origem do tráfego — 30 dias) |
 | Clientes | `novacrm_list_clients`, `novacrm_get_client`, `novacrm_create_client`, `novacrm_update_client`, `novacrm_import_clients` |
 | Produtos | `novacrm_list_products`, `novacrm_get_product`, `novacrm_create_product`, `novacrm_update_product`, `novacrm_delete_product` |
 | Estoque | `novacrm_inventory_alerts`, `novacrm_adjust_stock` |
@@ -140,6 +141,9 @@ Status de pedido válidos: `pending_payment`, `new`, `processing`,
   pendentes e alertas de estoque).
 - `auditoria_estoque` — auditoria do catálogo com plano de reposição
   (aceita `limite_alerta`).
+- `analise_trafego_loja` — análise de tráfego da loja pública: visitantes,
+  origens, dispositivos, produtos mais vistos e taxa de checkout com
+  recomendações de conversão.
 
 ## Variáveis de ambiente
 

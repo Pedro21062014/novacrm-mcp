@@ -29,7 +29,7 @@ const API_KEY = process.env.NOVACRM_API_KEY || '';
 const BASE_URL = (process.env.NOVACRM_BASE_URL || 'https://console.novacrm.com.br/api/v1').replace(/\/+$/, '');
 
 const SERVER_NAME = 'novacrm-mcp-server';
-const SERVER_VERSION = '1.2.0';
+const SERVER_VERSION = '1.3.0';
 const PROTOCOL_VERSION = '2024-11-05';
 
 const ORDER_STATUSES = ['pending_payment', 'new', 'processing', 'completed', 'cancelled'];
@@ -98,8 +98,13 @@ const TOOLS = [
   tool('novacrm_get_metrics',
     'Resumo analítico da loja: faturamento pago, ticket médio, pedidos por status, total de clientes e produtos.',
     {
-      detail: { type: 'string', enum: ['overview', 'revenue', 'orders', 'products', 'clients', 'inventory'], description: 'Visão detalhada opcional: revenue (faturamento), orders (pedidos por status), products (mais vendidos e estoque baixo), clients (top clientes por LTV), inventory (unidades totais e faltando)' },
+      detail: { type: 'string', enum: ['overview', 'revenue', 'orders', 'products', 'clients', 'inventory', 'visits'], description: 'Visão detalhada opcional: revenue (faturamento), orders (pedidos por status), products (mais vendidos e estoque baixo), clients (top clientes por LTV), inventory (unidades totais e faltando), visits (acessos anônimos à loja pública)' },
     },
+    []),
+
+  tool('novacrm_get_store_visits',
+    'Acessos à loja pública nos últimos 30 dias (dados anônimos agregados): visitantes únicos, visualizações da vitrine, produtos mais vistos, sacolas abertas, taxa de checkout, série diária, dispositivos e origem do tráfego.',
+    {},
     []),
 
   tool('novacrm_list_clients',
@@ -563,6 +568,11 @@ const PROMPTS = [
       { name: 'limite_alerta', description: 'Estoque mínimo considerado crítico (padrão 5)', required: false },
     ],
   },
+  {
+    name: 'analise_trafego_loja',
+    description: 'Analisa o tráfego da loja pública nos últimos 30 dias: visitantes, origens, dispositivos, produtos mais vistos e taxa de checkout.',
+    arguments: [],
+  },
 ];
 
 function promptMessages(name, args = {}) {
@@ -582,6 +592,15 @@ function promptMessages(name, args = {}) {
       messages: [{
         role: 'user',
         content: { type: 'text', text: `Use novacrm_inventory_alerts com threshold=${limite} e novacrm_list_products, identifique produtos esgotados e com estoque abaixo de ${limite} unidades e elabore um plano de reposição prioritário.` },
+      }],
+    };
+  }
+  if (name === 'analise_trafego_loja') {
+    return {
+      description: 'Análise de tráfego da loja NovaCRM',
+      messages: [{
+        role: 'user',
+        content: { type: 'text', text: 'Use novacrm_get_store_visits e monte uma análise de tráfego da loja: visitantes únicos e visualizações, de onde vem o tráfego (acesso direto x redes sociais x busca), dispositivos, produtos mais vistos, taxa de checkout e 3 recomendações práticas para aumentar conversão.' },
       }],
     };
   }
@@ -615,6 +634,11 @@ async function executeTool(name, args = {}) {
       const path = args.detail && args.detail !== 'overview' ? `/analytics/${encodeURIComponent(args.detail)}` : '/analytics';
       const { data, meta } = await callNovaCrmApi(path);
       return { analytics: data, meta };
+    }
+
+    case 'novacrm_get_store_visits': {
+      const { data, meta } = await callNovaCrmApi('/analytics/visits');
+      return { visits: data?.analytics?.visits ?? data, meta };
     }
 
     case 'novacrm_list_clients': {

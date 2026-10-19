@@ -5,7 +5,7 @@
  *
  *   - initialize (serverInfo, protocolVersion, capabilities)
  *   - notifications/initialized (sem resposta, sem chamada à API)
- *   - ping, tools/list (49 ferramentas, prefixo novacrm_, schemas)
+ *   - ping, tools/list (50 ferramentas, prefixo novacrm_, schemas)
  *   - tools/call de leitura (list_products com Bearer correto + paginação)
  *   - tools/call novacrm_ping (status connected, ambiente production)
  *   - tools/call de escrita (create_product, update_order_status com status REAL)
@@ -63,6 +63,7 @@ const apiServer = http.createServer((req, res) => {
 
     if (url === '/api/v1/analytics') return ok({ analytics: { financial: { revenue: 1234.5, currency: 'BRL' }, orders: { total: 42 } } });
     if (url === '/api/v1/analytics/revenue') return ok({ analytics: { revenue: { paid: 1234.5, currency: 'BRL', averageTicket: 58.7 } } });
+    if (url === '/api/v1/analytics/visits') return ok({ analytics: { visits: { window: 'last_30_days', pageviews: 342, uniqueVisitors: 218, productViews: 501, checkouts: 74, checkoutRate: 34, daily: [{ date: '2026-10-19', pageviews: 21, uniqueVisitors: 15 }], byDevice: [{ name: 'mobile', value: 271 }], byReferrer: [{ name: 'direct', value: 190 }], topViewedProducts: [{ productId: 'p1', name: 'Camiseta NovaCRM', views: 96 }] } } });
     if (url.startsWith('/api/v1/products') && req.method === 'GET') {
       return ok({ products: [{ id: 'p1', name: 'Camiseta NovaCRM', price: 49.9, stock: 12 }] }, { apiVersion: 'v1', pagination: { total: 1, limit: 50, offset: 0 } });
     }
@@ -202,7 +203,7 @@ try {
   check(ping.result && JSON.stringify(ping.result) === '{}', 'ping devolve result vazio');
   const tools = await call('tools/list');
   const catalog = tools.result?.tools;
-  check(Array.isArray(catalog) && catalog.length === 49, `tools/list devolve 49 ferramentas (${catalog?.length})`);
+  check(Array.isArray(catalog) && catalog.length === 50, `tools/list devolve 50 ferramentas (${catalog?.length})`);
   check(catalog.every((t) => t.name.startsWith('novacrm_')), 'todas as ferramentas têm o prefixo novacrm_');
   check(catalog.every((t) => t.inputSchema?.type === 'object'), 'todas as ferramentas têm inputSchema object');
   const requiredTool = catalog.find((t) => t.name === 'novacrm_create_product');
@@ -265,6 +266,15 @@ try {
   const lastMetrics = apiCalls[apiCalls.length - 1];
   check(lastMetrics?.method === 'GET' && lastMetrics?.path === '/api/v1/analytics/revenue', 'get_metrics detail=revenue chama GET /api/v1/analytics/revenue');
   check(metrics.result?.isError === false && metrics.result.content[0].text.includes('averageTicket'), 'get_metrics devolve a visão detalhada de faturamento');
+
+  // tools/call — visitas à loja pública (analytics/visits)
+  const visits = await tool('novacrm_get_store_visits', {});
+  const lastVisits = apiCalls[apiCalls.length - 1];
+  check(lastVisits?.method === 'GET' && lastVisits?.path === '/api/v1/analytics/visits', 'get_store_visits chama GET /api/v1/analytics/visits');
+  check(visits.result?.isError === false && visits.result.content[0].text.includes('uniqueVisitors') && visits.result.content[0].text.includes('topViewedProducts'), 'get_store_visits devolve visitantes únicos e produtos mais vistos');
+  const visitsDetail = await tool('novacrm_get_metrics', { detail: 'visits' });
+  check(apiCalls[apiCalls.length - 1]?.path === '/api/v1/analytics/visits', 'get_metrics detail=visits também alcança a rota de visitas');
+  check(visitsDetail.result?.isError === false, 'get_metrics detail=visits devolve o agregado sem erro');
 
   // tools/call — importação em lote
   const imported = await tool('novacrm_import_clients', { records: [{ name: 'Ana' }, { name: 'Bia' }, { name: 'Caio' }] });
@@ -348,11 +358,13 @@ try {
 
   // prompts
   const prompts = await call('prompts/list');
-  check(prompts.result?.prompts?.length === 2, 'prompts/list devolve os 2 prompts prontos');
+  check(prompts.result?.prompts?.length === 3, 'prompts/list devolve os 3 prompts prontos');
   const promptGet = await call('prompts/get', { name: 'resumo_diario_loja' });
   check(promptGet.result?.messages?.[0]?.content?.type === 'text', 'prompts/get devolve mensagem usável');
   const promptArgs = await call('prompts/get', { name: 'auditoria_estoque', arguments: { limite_alerta: 7 } });
   check(promptArgs.result?.messages?.[0]?.content?.text.includes('threshold=7'), 'prompt auditoria_estoque usa o argumento limite_alerta');
+  const promptTrafego = await call('prompts/get', { name: 'analise_trafego_loja' });
+  check(promptTrafego.result?.messages?.[0]?.content?.text.includes('novacrm_get_store_visits'), 'prompt analise_trafego_loja orienta usar a ferramenta de visitas');
   const promptBad = await call('prompts/get', { name: 'inexistente' });
   check(promptBad.error?.code === -32602, 'prompt inexistente devolve -32602');
 
