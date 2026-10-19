@@ -1,6 +1,6 @@
 {
   "name": "novacrm-mcp",
-  "version": "1.1.3",
+  "version": "1.2.0",
   "description": "Servidor MCP (Model Context Protocol) oficial do NovaCRM — conecta IAs como Claude Desktop, Cursor, Claude Code e Gemini CLI à sua loja através da API pública v1.",
   "type": "module",
   "main": "index.mjs",

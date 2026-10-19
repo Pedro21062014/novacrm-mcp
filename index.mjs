@@ -29,11 +29,17 @@ const API_KEY = process.env.NOVACRM_API_KEY || '';
 const BASE_URL = (process.env.NOVACRM_BASE_URL || 'https://console.novacrm.com.br/api/v1').replace(/\/+$/, '');
 
 const SERVER_NAME = 'novacrm-mcp-server';
-const SERVER_VERSION = '1.1.3';
+const SERVER_VERSION = '1.2.0';
 const PROTOCOL_VERSION = '2024-11-05';
 
 const ORDER_STATUSES = ['pending_payment', 'new', 'processing', 'completed', 'cancelled'];
-const WEBHOOK_EVENTS = ['client.created', 'client.updated', 'client.deleted', 'product.created', 'product.updated', 'product.deleted', 'inventory.adjusted', 'inventory.low', 'order.created', 'order.status_updated', 'order.cancelled', '*'];
+const AUTOMATION_TRIGGERS = ['client_created', 'order_created', 'order_paid', 'proposal_approved', 'opportunity_won', 'inactive_client_30d'];
+const AUTOMATION_ACTION_TYPES = ['create_task', 'send_telegram', 'update_client_status', 'add_notification'];
+const TASK_TYPES = ['call', 'meeting', 'whatsapp', 'email', 'followup', 'proposal', 'other'];
+const TASK_STATUSES = ['pending', 'completed', 'cancelled'];
+const PROPOSAL_STATUSES = ['draft', 'sent', 'viewed', 'approved', 'rejected'];
+const OPPORTUNITY_STAGES = ['lead', 'contact', 'proposal', 'negotiation', 'won', 'lost'];
+const WEBHOOK_EVENTS = ['client.created', 'client.updated', 'client.deleted', 'product.created', 'product.updated', 'product.deleted', 'inventory.adjusted', 'inventory.low', 'order.created', 'order.status_updated', 'order.cancelled', 'automation.created', 'automation.updated', 'automation.deleted', 'task.created', 'task.updated', 'task.deleted', 'proposal.created', 'proposal.updated', 'proposal.deleted', 'opportunity.created', 'opportunity.updated', 'opportunity.deleted', '*'];
 
 // ---------------------------------------------------------------- HTTP ----
 
@@ -323,6 +329,223 @@ const TOOLS = [
       events: { type: 'array', items: { type: 'string', enum: WEBHOOK_EVENTS }, description: 'Eventos assinados (use * para todos)' },
     },
     ['url', 'events']),
+
+  // ------------------------------------------------ Automações de CRM ----
+
+  tool('novacrm_list_automations',
+    'Lista as regras de automação da loja (gatilhos e ações). Use includeArchived para ver cópias arquivadas pela revisão de duplicatas.',
+    {
+      limit: { type: 'number', description: 'Itens por página (1–100, padrão 50)' },
+      offset: { type: 'number', description: 'Deslocamento da paginação (padrão 0)' },
+      includeArchived: { type: 'boolean', description: 'Incluir cópias arquivadas (padrão false)' },
+    },
+    []),
+
+  tool('novacrm_get_automation',
+    'Obtém uma regra de automação pelo ID, com condição, ação e estatísticas de execução.',
+    { id: { type: 'string', description: 'ID da automação' } },
+    ['id']),
+
+  tool('novacrm_create_automation',
+    'Cria uma regra de automação: quando um gatilho ocorre (ex: order_paid), executa uma ação (ex: criar tarefa de follow-up).',
+    {
+      name: { type: 'string', description: 'Nome da regra' },
+      trigger: { type: 'string', enum: AUTOMATION_TRIGGERS, description: 'Evento que dispara a regra' },
+      actionType: { type: 'string', enum: AUTOMATION_ACTION_TYPES, description: 'Ação executada quando o gatilho ocorre' },
+      actionConfig: { type: 'object', description: 'Configuração da ação (ex: taskTitle, taskType, delayDays para create_task)' },
+      description: { type: 'string', description: 'Descrição da regra' },
+      isActive: { type: 'boolean', description: 'Regra ativa (padrão true)' },
+    },
+    ['name', 'trigger']),
+
+  tool('novacrm_update_automation',
+    'Atualiza uma regra de automação existente (envie apenas os campos a alterar).',
+    {
+      id: { type: 'string', description: 'ID da automação' },
+      name: { type: 'string' },
+      trigger: { type: 'string', enum: AUTOMATION_TRIGGERS },
+      actionType: { type: 'string', enum: AUTOMATION_ACTION_TYPES },
+      actionConfig: { type: 'object' },
+      description: { type: 'string' },
+      isActive: { type: 'boolean', description: 'Pausar (false) ou ativar (true) a regra' },
+    },
+    ['id']),
+
+  tool('novacrm_delete_automation',
+    'Exclui permanentemente uma regra de automação.',
+    { id: { type: 'string', description: 'ID da automação' } },
+    ['id']),
+
+  // ------------------------------------------------------------- Tarefas ----
+
+  tool('novacrm_list_tasks',
+    'Lista tarefas da agenda comercial com filtro por status e paginação.',
+    {
+      status: { type: 'string', enum: TASK_STATUSES, description: 'Filtrar por status (padrão: todas)' },
+      limit: { type: 'number', description: 'Itens por página (1–100, padrão 50)' },
+      offset: { type: 'number', description: 'Deslocamento da paginação (padrão 0)' },
+      includeArchived: { type: 'boolean', description: 'Incluir cópias arquivadas (padrão false)' },
+    },
+    []),
+
+  tool('novacrm_get_task',
+    'Obtém uma tarefa pelo ID, com cliente vinculado e datas.',
+    { id: { type: 'string', description: 'ID da tarefa' } },
+    ['id']),
+
+  tool('novacrm_create_task',
+    'Cria uma tarefa na agenda comercial (follow-up, ligação, reunião, e-mail…).',
+    {
+      title: { type: 'string', description: 'Título da tarefa' },
+      dueDate: { type: 'string', description: 'Vencimento no formato YYYY-MM-DD' },
+      dueTime: { type: 'string', description: 'Horário HH:mm (opcional)' },
+      type: { type: 'string', enum: TASK_TYPES, description: 'Tipo/canal da tarefa' },
+      priority: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Prioridade (padrão medium)' },
+      description: { type: 'string', description: 'Detalhes da tarefa' },
+      clientId: { type: 'string', description: 'ID do cliente vinculado' },
+      clientName: { type: 'string', description: 'Nome do cliente' },
+      clientPhone: { type: 'string', description: 'Telefone do cliente' },
+    },
+    ['title', 'dueDate']),
+
+  tool('novacrm_update_task',
+    'Atualiza uma tarefa existente (envie apenas os campos a alterar).',
+    {
+      id: { type: 'string', description: 'ID da tarefa' },
+      title: { type: 'string' },
+      description: { type: 'string' },
+      type: { type: 'string', enum: TASK_TYPES },
+      dueDate: { type: 'string' },
+      dueTime: { type: 'string' },
+      priority: { type: 'string', enum: ['low', 'medium', 'high'] },
+      status: { type: 'string', enum: TASK_STATUSES },
+      clientId: { type: 'string' },
+      clientName: { type: 'string' },
+      clientPhone: { type: 'string' },
+    },
+    ['id']),
+
+  tool('novacrm_complete_task',
+    'Marca uma tarefa como concluída e registra a data de conclusão.',
+    { id: { type: 'string', description: 'ID da tarefa' } },
+    ['id']),
+
+  tool('novacrm_delete_task',
+    'Exclui permanentemente uma tarefa.',
+    { id: { type: 'string', description: 'ID da tarefa' } },
+    ['id']),
+
+  // ----------------------------------------------------------- Propostas ----
+
+  tool('novacrm_list_proposals',
+    'Lista propostas comerciais com filtro por status e paginação.',
+    {
+      status: { type: 'string', enum: PROPOSAL_STATUSES, description: 'Filtrar por status (padrão: todas)' },
+      limit: { type: 'number', description: 'Itens por página (1–100, padrão 50)' },
+      offset: { type: 'number', description: 'Deslocamento da paginação (padrão 0)' },
+    },
+    []),
+
+  tool('novacrm_get_proposal',
+    'Obtém uma proposta pelo ID, com cliente, itens e totais.',
+    { id: { type: 'string', description: 'ID da proposta' } },
+    ['id']),
+
+  tool('novacrm_create_proposal',
+    'Cria uma proposta comercial. subtotal e total são calculados automaticamente a partir dos itens quando omitidos.',
+    {
+      title: { type: 'string', description: 'Título da proposta' },
+      clientName: { type: 'string', description: 'Nome do cliente' },
+      clientId: { type: 'string', description: 'ID do cliente (opcional)' },
+      clientEmail: { type: 'string', description: 'E-mail do cliente' },
+      clientPhone: { type: 'string', description: 'Telefone do cliente' },
+      items: { type: 'array', items: { type: 'object', description: 'Item: { name, quantity, unitPrice, description?, productId? }' }, description: 'Itens da proposta' },
+      discount: { type: 'number', description: 'Desconto em Reais (padrão 0)' },
+      validUntil: { type: 'string', description: 'Validade no formato YYYY-MM-DD' },
+      paymentTerms: { type: 'string', description: 'Condições de pagamento' },
+      notes: { type: 'string', description: 'Observações' },
+      status: { type: 'string', enum: PROPOSAL_STATUSES, description: 'Status inicial (padrão draft)' },
+    },
+    ['title', 'clientName']),
+
+  tool('novacrm_update_proposal',
+    'Atualiza uma proposta existente, incluindo mudança de status (ex: sent, approved, rejected).',
+    {
+      id: { type: 'string', description: 'ID da proposta' },
+      title: { type: 'string' },
+      status: { type: 'string', enum: PROPOSAL_STATUSES, description: 'Novo status da proposta' },
+      items: { type: 'array', items: { type: 'object' } },
+      discount: { type: 'number' },
+      validUntil: { type: 'string' },
+      paymentTerms: { type: 'string' },
+      notes: { type: 'string' },
+    },
+    ['id']),
+
+  tool('novacrm_delete_proposal',
+    'Exclui permanentemente uma proposta.',
+    { id: { type: 'string', description: 'ID da proposta' } },
+    ['id']),
+
+  // ----------------------------------------------- Pipeline (funil) -------
+
+  tool('novacrm_list_opportunities',
+    'Lista oportunidades do pipeline de vendas com filtro por estágio e paginação.',
+    {
+      stage: { type: 'string', enum: OPPORTUNITY_STAGES, description: 'Filtrar por estágio do funil (padrão: todas)' },
+      limit: { type: 'number', description: 'Itens por página (1–100, padrão 50)' },
+      offset: { type: 'number', description: 'Deslocamento da paginação (padrão 0)' },
+    },
+    []),
+
+  tool('novacrm_get_opportunity',
+    'Obtém uma oportunidade pelo ID, com cliente, valor e estágio.',
+    { id: { type: 'string', description: 'ID da oportunidade' } },
+    ['id']),
+
+  tool('novacrm_create_opportunity',
+    'Cria uma oportunidade (negócio) no pipeline de vendas.',
+    {
+      title: { type: 'string', description: 'Título do negócio' },
+      clientName: { type: 'string', description: 'Nome do cliente' },
+      clientId: { type: 'string', description: 'ID do cliente (opcional)' },
+      value: { type: 'number', description: 'Valor estimado em Reais' },
+      stage: { type: 'string', enum: OPPORTUNITY_STAGES, description: 'Estágio inicial (padrão lead)' },
+      probability: { type: 'number', description: 'Probabilidade de fechamento 0–100' },
+      expectedCloseDate: { type: 'string', description: 'Data prevista de fechamento YYYY-MM-DD' },
+      notes: { type: 'string', description: 'Observações' },
+      priority: { type: 'string', enum: ['low', 'medium', 'high'] },
+    },
+    ['title', 'clientName']),
+
+  tool('novacrm_move_opportunity',
+    'Move uma oportunidade de estágio no funil (lead → contact → proposal → negotiation → won/lost). Ganho ajusta a probabilidade para 100; perdido zera e aceita motivo da perda.',
+    {
+      id: { type: 'string', description: 'ID da oportunidade' },
+      stage: { type: 'string', enum: OPPORTUNITY_STAGES, description: 'Estágio de destino' },
+      lossReason: { type: 'string', description: 'Motivo da perda (quando stage=lost)' },
+    },
+    ['id', 'stage']),
+
+  tool('novacrm_update_opportunity',
+    'Atualiza uma oportunidade existente (envie apenas os campos a alterar).',
+    {
+      id: { type: 'string', description: 'ID da oportunidade' },
+      title: { type: 'string' },
+      value: { type: 'number' },
+      stage: { type: 'string', enum: OPPORTUNITY_STAGES },
+      probability: { type: 'number' },
+      expectedCloseDate: { type: 'string' },
+      notes: { type: 'string' },
+      priority: { type: 'string', enum: ['low', 'medium', 'high'] },
+      lossReason: { type: 'string' },
+    },
+    ['id']),
+
+  tool('novacrm_delete_opportunity',
+    'Exclui permanentemente uma oportunidade do pipeline.',
+    { id: { type: 'string', description: 'ID da oportunidade' } },
+    ['id']),
 ];
 
 // ------------------------------------------------------------- Prompts ----
@@ -534,6 +757,182 @@ async function executeTool(name, args = {}) {
     case 'novacrm_create_webhook': {
       const { data } = await callNovaCrmApi('/webhooks', { method: 'POST', body: { name: args.name, url: args.url, events: Array.isArray(args.events) ? args.events : [] } });
       return data?.webhook ?? data;
+    }
+
+    // ---------------------------------------------- Automações de CRM ----
+
+    case 'novacrm_list_automations': {
+      const { data, meta } = await callNovaCrmApi(`/automations${qs({ limit: args.limit, offset: args.offset, includeArchived: args.includeArchived })}`);
+      return { automations: data?.automations ?? [], pagination: meta?.pagination ?? null };
+    }
+
+    case 'novacrm_get_automation': {
+      const { data } = await callNovaCrmApi(`/automations/${encodeURIComponent(args.id)}`);
+      return data?.automation ?? data;
+    }
+
+    case 'novacrm_create_automation': {
+      const { data } = await callNovaCrmApi('/automations', {
+        method: 'POST',
+        body: {
+          name: args.name,
+          trigger: args.trigger,
+          actionType: args.actionType,
+          actionConfig: args.actionConfig,
+          description: args.description,
+          isActive: args.isActive,
+        },
+      });
+      return data?.automation ?? data;
+    }
+
+    case 'novacrm_update_automation': {
+      const { id, ...updates } = args;
+      const { data } = await callNovaCrmApi(`/automations/${encodeURIComponent(id)}`, { method: 'PATCH', body: updates });
+      return data?.automation ?? data;
+    }
+
+    case 'novacrm_delete_automation': {
+      const { data } = await callNovaCrmApi(`/automations/${encodeURIComponent(args.id)}`, { method: 'DELETE' });
+      return data?.deletion ?? data;
+    }
+
+    // --------------------------------------------------------- Tarefas ----
+
+    case 'novacrm_list_tasks': {
+      const { data, meta } = await callNovaCrmApi(`/tasks${qs({ status: args.status, limit: args.limit, offset: args.offset, includeArchived: args.includeArchived })}`);
+      return { tasks: data?.tasks ?? [], pagination: meta?.pagination ?? null };
+    }
+
+    case 'novacrm_get_task': {
+      const { data } = await callNovaCrmApi(`/tasks/${encodeURIComponent(args.id)}`);
+      return data?.task ?? data;
+    }
+
+    case 'novacrm_create_task': {
+      const { data } = await callNovaCrmApi('/tasks', {
+        method: 'POST',
+        body: {
+          title: args.title,
+          dueDate: args.dueDate,
+          dueTime: args.dueTime,
+          type: args.type,
+          priority: args.priority,
+          description: args.description,
+          clientId: args.clientId,
+          clientName: args.clientName,
+          clientPhone: args.clientPhone,
+        },
+      });
+      return data?.task ?? data;
+    }
+
+    case 'novacrm_update_task': {
+      const { id, ...updates } = args;
+      const { data } = await callNovaCrmApi(`/tasks/${encodeURIComponent(id)}`, { method: 'PATCH', body: updates });
+      return data?.task ?? data;
+    }
+
+    case 'novacrm_complete_task': {
+      const { data } = await callNovaCrmApi(`/tasks/${encodeURIComponent(args.id)}/complete`, { method: 'POST' });
+      return data?.task ?? data;
+    }
+
+    case 'novacrm_delete_task': {
+      const { data } = await callNovaCrmApi(`/tasks/${encodeURIComponent(args.id)}`, { method: 'DELETE' });
+      return data?.deletion ?? data;
+    }
+
+    // ------------------------------------------------------- Propostas ----
+
+    case 'novacrm_list_proposals': {
+      const { data, meta } = await callNovaCrmApi(`/proposals${qs({ status: args.status, limit: args.limit, offset: args.offset })}`);
+      return { proposals: data?.proposals ?? [], pagination: meta?.pagination ?? null };
+    }
+
+    case 'novacrm_get_proposal': {
+      const { data } = await callNovaCrmApi(`/proposals/${encodeURIComponent(args.id)}`);
+      return data?.proposal ?? data;
+    }
+
+    case 'novacrm_create_proposal': {
+      const { data } = await callNovaCrmApi('/proposals', {
+        method: 'POST',
+        body: {
+          title: args.title,
+          clientName: args.clientName,
+          clientId: args.clientId,
+          clientEmail: args.clientEmail,
+          clientPhone: args.clientPhone,
+          items: Array.isArray(args.items) ? args.items : [],
+          discount: args.discount,
+          validUntil: args.validUntil,
+          paymentTerms: args.paymentTerms,
+          notes: args.notes,
+          status: args.status,
+        },
+      });
+      return data?.proposal ?? data;
+    }
+
+    case 'novacrm_update_proposal': {
+      const { id, ...updates } = args;
+      const { data } = await callNovaCrmApi(`/proposals/${encodeURIComponent(id)}`, { method: 'PATCH', body: updates });
+      return data?.proposal ?? data;
+    }
+
+    case 'novacrm_delete_proposal': {
+      const { data } = await callNovaCrmApi(`/proposals/${encodeURIComponent(args.id)}`, { method: 'DELETE' });
+      return data?.deletion ?? data;
+    }
+
+    // -------------------------------------------- Pipeline (funil) -------
+
+    case 'novacrm_list_opportunities': {
+      const { data, meta } = await callNovaCrmApi(`/opportunities${qs({ stage: args.stage, limit: args.limit, offset: args.offset })}`);
+      return { opportunities: data?.opportunities ?? [], pagination: meta?.pagination ?? null };
+    }
+
+    case 'novacrm_get_opportunity': {
+      const { data } = await callNovaCrmApi(`/opportunities/${encodeURIComponent(args.id)}`);
+      return data?.opportunity ?? data;
+    }
+
+    case 'novacrm_create_opportunity': {
+      const { data } = await callNovaCrmApi('/opportunities', {
+        method: 'POST',
+        body: {
+          title: args.title,
+          clientName: args.clientName,
+          clientId: args.clientId,
+          value: args.value,
+          stage: args.stage,
+          probability: args.probability,
+          expectedCloseDate: args.expectedCloseDate,
+          notes: args.notes,
+          priority: args.priority,
+        },
+      });
+      return data?.opportunity ?? data;
+    }
+
+    case 'novacrm_move_opportunity': {
+      const { data } = await callNovaCrmApi(`/opportunities/${encodeURIComponent(args.id)}/stage`, {
+        method: 'PATCH',
+        body: { stage: args.stage, lossReason: args.lossReason },
+      });
+      return data?.opportunity ?? data;
+    }
+
+    case 'novacrm_update_opportunity': {
+      const { id, ...updates } = args;
+      const { data } = await callNovaCrmApi(`/opportunities/${encodeURIComponent(id)}`, { method: 'PATCH', body: updates });
+      return data?.opportunity ?? data;
+    }
+
+    case 'novacrm_delete_opportunity': {
+      const { data } = await callNovaCrmApi(`/opportunities/${encodeURIComponent(args.id)}`, { method: 'DELETE' });
+      return data?.deletion ?? data;
     }
 
     default:

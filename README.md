@@ -3,11 +3,12 @@
 Servidor **MCP (Model Context Protocol)** oficial do **NovaCRM**. Conecta IAs
 como **Claude Desktop, Cursor, Claude Code, Gemini CLI, Zed e Cline** aos dados
 e operações da sua loja — clientes, produtos, estoque, pedidos, cupons,
-webhooks e métricas — tudo através da **API pública v1** do NovaCRM,
-autenticado pela chave de API da loja.
+**automações, tarefas, propostas, pipeline de vendas**, webhooks e métricas —
+tudo através da **API pública v1** do NovaCRM, autenticado pela chave de API
+da loja.
 
 - **Zero dependências**: JSON-RPC 2.0 sobre STDIO implementado na mão (Node ≥ 18).
-- **27 ferramentas** cobrindo o dia a dia da loja + **2 prompts prontos**.
+- **49 ferramentas** cobrindo o dia a dia da loja + **2 prompts prontos**.
 - **Escopos respeitados**: a chave define o que a IA pode fazer (leitura e/ou
   escrita), e os limites do plano e o rate limit valem normalmente.
 
@@ -108,7 +109,7 @@ Adicione ao `settings.json` do Gemini CLI:
 Qualquer cliente MCP com transporte STDIO funciona: aponte o comando para
 `npx novacrm-mcp` com a variável `NOVACRM_API_KEY`.
 
-## Ferramentas disponíveis (27)
+## Ferramentas disponíveis (49)
 
 | Grupo | Ferramentas |
 | --- | --- |
@@ -119,11 +120,19 @@ Qualquer cliente MCP com transporte STDIO funciona: aponte o comando para
 | Estoque | `novacrm_inventory_alerts`, `novacrm_adjust_stock` |
 | Pedidos | `novacrm_list_orders`, `novacrm_get_order`, `novacrm_create_order`, `novacrm_update_order_status`, `novacrm_cancel_order` |
 | Cupons | `novacrm_list_coupons`, `novacrm_create_coupon`, `novacrm_validate_coupon` |
+| Automações | `novacrm_list_automations`, `novacrm_get_automation`, `novacrm_create_automation`, `novacrm_update_automation`, `novacrm_delete_automation` |
+| Tarefas | `novacrm_list_tasks`, `novacrm_get_task`, `novacrm_create_task`, `novacrm_update_task`, `novacrm_complete_task`, `novacrm_delete_task` |
+| Propostas | `novacrm_list_proposals`, `novacrm_get_proposal`, `novacrm_create_proposal`, `novacrm_update_proposal`, `novacrm_delete_proposal` |
+| Pipeline | `novacrm_list_opportunities`, `novacrm_get_opportunity`, `novacrm_create_opportunity`, `novacrm_move_opportunity`, `novacrm_update_opportunity`, `novacrm_delete_opportunity` |
 | Loja | `novacrm_get_store`, `novacrm_update_store`, `novacrm_set_store_status` |
 | Webhooks | `novacrm_list_webhooks`, `novacrm_create_webhook` |
 
 Status de pedido válidos: `pending_payment`, `new`, `processing`,
-`completed`, `cancelled`.
+`completed`, `cancelled`. Gatilhos de automação: `client_created`,
+`order_created`, `order_paid`, `proposal_approved`, `opportunity_won`,
+`inactive_client_30d`. Estágios do pipeline: `lead`, `contact`, `proposal`,
+`negotiation`, `won`, `lost`. Status de proposta: `draft`, `sent`, `viewed`,
+`approved`, `rejected`.
 
 ## Prompts prontos
 

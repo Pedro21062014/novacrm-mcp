@@ -5,7 +5,7 @@
  *
  *   - initialize (serverInfo, protocolVersion, capabilities)
  *   - notifications/initialized (sem resposta, sem chamada à API)
- *   - ping, tools/list (27 ferramentas, prefixo novacrm_, schemas)
+ *   - ping, tools/list (49 ferramentas, prefixo novacrm_, schemas)
  *   - tools/call de leitura (list_products com Bearer correto + paginação)
  *   - tools/call novacrm_ping (status connected, ambiente production)
  *   - tools/call de escrita (create_product, update_order_status com status REAL)
@@ -13,6 +13,8 @@
  *   - list_clients com includeArchived, delete_product com permanent=true,
  *     get_metrics com detail=revenue
  *   - importação em lote (imports/clients)
+ *   - ferramentas novas: automações (criar + pausar), tarefas (criar + concluir),
+ *     propostas (criar + mudar status), pipeline (criar + mover de estágio)
  *   - erro de envelope da API (422 → isError=true preservando código/mensagem)
  *   - prompts/list, prompts/get (com e sem argumentos), prompt inexistente
  *   - lote JSON-RPC (batch de 2 requisições em uma linha)
@@ -87,6 +89,63 @@ const apiServer = http.createServer((req, res) => {
     if (url === '/api/v1/inventory/alerts?threshold=3') {
       return ok({ inventory: [{ id: 'p1', name: 'Camiseta NovaCRM', stock: 2 }] });
     }
+
+    // ---- Novos recursos: automações, tarefas, propostas, pipeline ----
+    if (url.startsWith('/api/v1/automations') && req.method === 'GET') {
+      return ok({ automations: [{ id: 'a1', name: 'Follow-up pós-compra', active: true, trigger: 'order_paid', stats: { executions: 9 } }] }, { apiVersion: 'v1', pagination: { total: 1, limit: 50, offset: 0 } });
+    }
+    if (url === '/api/v1/automations' && req.method === 'POST') {
+      return ok({ automation: { id: 'a2', name: body.name, active: true, trigger: body.trigger, action: { type: body.actionType, config: body.actionConfig } } }, { apiVersion: 'v1' }, 201);
+    }
+    if (url.startsWith('/api/v1/automations/') && req.method === 'PATCH') {
+      const id = url.split('/api/v1/automations/')[1].split('?')[0];
+      return ok({ automation: { id, active: body.isActive === true } });
+    }
+    if (url.startsWith('/api/v1/automations/') && req.method === 'DELETE') {
+      const id = url.split('/api/v1/automations/')[1].split('?')[0];
+      return ok({ deletion: { id, permanent: true } });
+    }
+
+    if (url.startsWith('/api/v1/tasks') && req.method === 'GET') {
+      return ok({ tasks: [{ id: 't1', title: 'Retornar para Ana', status: 'pending', dueDate: '2026-10-20' }] }, { apiVersion: 'v1', pagination: { total: 1, limit: 50, offset: 0 } });
+    }
+    if (url === '/api/v1/tasks' && req.method === 'POST') {
+      return ok({ task: { id: 't2', title: body.title, dueDate: body.dueDate, status: 'pending' } }, { apiVersion: 'v1' }, 201);
+    }
+    if (url.startsWith('/api/v1/tasks/') && url.endsWith('/complete') && req.method === 'POST') {
+      const id = url.split('/api/v1/tasks/')[1].split('/complete')[0];
+      return ok({ task: { id, status: 'completed', completedAt: '2026-10-19T12:00:00.000Z' } });
+    }
+    if (url.startsWith('/api/v1/tasks/') && req.method === 'PATCH') {
+      const id = url.split('/api/v1/tasks/')[1].split('?')[0];
+      return ok({ task: { id, ...body } });
+    }
+
+    if (url.startsWith('/api/v1/proposals') && req.method === 'GET') {
+      return ok({ proposals: [{ id: 'pr1', title: 'Pacote Q4', status: 'sent', totals: { total: 2300 } }] }, { apiVersion: 'v1', pagination: { total: 1, limit: 50, offset: 0 } });
+    }
+    if (url === '/api/v1/proposals' && req.method === 'POST') {
+      return ok({ proposal: { id: 'pr2', title: body.title, client: { name: body.clientName }, status: body.status ?? 'draft', totals: { total: 2300 } } }, { apiVersion: 'v1' }, 201);
+    }
+    if (url.startsWith('/api/v1/proposals/') && req.method === 'PATCH') {
+      const id = url.split('/api/v1/proposals/')[1].split('?')[0];
+      return ok({ proposal: { id, status: body.status } });
+    }
+
+    if (url.startsWith('/api/v1/opportunities') && req.method === 'GET') {
+      return ok({ opportunities: [{ id: 'op1', title: 'Upgrade premium', stage: 'negotiation', value: 4500 }] }, { apiVersion: 'v1', pagination: { total: 1, limit: 50, offset: 0 } });
+    }
+    if (url === '/api/v1/opportunities' && req.method === 'POST') {
+      return ok({ opportunity: { id: 'op2', title: body.title, stage: body.stage ?? 'lead', value: body.value } }, { apiVersion: 'v1' }, 201);
+    }
+    if (url.startsWith('/api/v1/opportunities/') && url.endsWith('/stage') && req.method === 'PATCH') {
+      const id = url.split('/api/v1/opportunities/')[1].split('/stage')[0];
+      return ok({ opportunity: { id, stage: body.stage, probability: body.stage === 'won' ? 100 : 0, lossReason: body.lossReason } });
+    }
+    if (url.startsWith('/api/v1/opportunities/') && req.method === 'DELETE') {
+      const id = url.split('/api/v1/opportunities/')[1].split('?')[0];
+      return ok({ deletion: { id, permanent: true } });
+    }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: { code: 'route_not_found', message: url } }));
   });
@@ -143,13 +202,20 @@ try {
   check(ping.result && JSON.stringify(ping.result) === '{}', 'ping devolve result vazio');
   const tools = await call('tools/list');
   const catalog = tools.result?.tools;
-  check(Array.isArray(catalog) && catalog.length === 27, `tools/list devolve 27 ferramentas (${catalog?.length})`);
+  check(Array.isArray(catalog) && catalog.length === 49, `tools/list devolve 49 ferramentas (${catalog?.length})`);
   check(catalog.every((t) => t.name.startsWith('novacrm_')), 'todas as ferramentas têm o prefixo novacrm_');
   check(catalog.every((t) => t.inputSchema?.type === 'object'), 'todas as ferramentas têm inputSchema object');
   const requiredTool = catalog.find((t) => t.name === 'novacrm_create_product');
   check(JSON.stringify(requiredTool?.inputSchema?.required) === JSON.stringify(['name', 'price']), 'novacrm_create_product exige name e price');
   const statusTool = catalog.find((t) => t.name === 'novacrm_update_order_status');
   check(JSON.stringify(statusTool?.inputSchema?.properties?.status?.enum) === JSON.stringify(['pending_payment', 'new', 'processing', 'completed', 'cancelled']), 'status de pedido usa os valores REAIS da API v1');
+  const triggerTool = catalog.find((t) => t.name === 'novacrm_create_automation');
+  check(JSON.stringify(triggerTool?.inputSchema?.properties?.trigger?.enum) === JSON.stringify(['client_created', 'order_created', 'order_paid', 'proposal_approved', 'opportunity_won', 'inactive_client_30d']), 'gatilho de automação usa os valores REAIS da API v1');
+  const stageTool = catalog.find((t) => t.name === 'novacrm_move_opportunity');
+  check(JSON.stringify(stageTool?.inputSchema?.properties?.stage?.enum) === JSON.stringify(['lead', 'contact', 'proposal', 'negotiation', 'won', 'lost']), 'estágio do pipeline usa os valores REAIS da API v1');
+  const taskRequired = catalog.find((t) => t.name === 'novacrm_create_task');
+  check(JSON.stringify(taskRequired?.inputSchema?.required) === JSON.stringify(['title', 'dueDate']), 'novacrm_create_task exige title e dueDate');
+  for (const family of ['list_automations', 'list_tasks', 'list_proposals', 'list_opportunities']) check(catalog.some((t) => t.name === `novacrm_${family}`), `ferramenta novacrm_${family} presente no catálogo`);
 
   // tools/call — leitura
   const list = await tool('novacrm_list_products', { limit: 10 });
@@ -211,6 +277,74 @@ try {
   const errCall = await tool('novacrm_create_client', { phone: '11999' });
   check(errCall.result?.isError === true, 'erro da API vira isError=true no MCP');
   check(errCall.result?.content?.[0]?.text.includes('validation_error') && errCall.result.content[0].text.includes('Informe name'), 'mensagem de erro preserva código e mensagem do envelope');
+
+  // tools/call — automações
+  const automations = await tool('novacrm_list_automations', { includeArchived: true });
+  const lastAutomations = apiCalls[apiCalls.length - 1];
+  check(lastAutomations?.method === 'GET' && lastAutomations?.path === '/api/v1/automations?includeArchived=true', 'list_automations repassa includeArchived na query');
+  check(automations.result?.isError === false && automations.result.content[0].text.includes('Follow-up pós-compra'), 'list_automations devolve as regras da API simulada');
+  const automationCreated = await tool('novacrm_create_automation', { name: 'Follow-up 3 dias', trigger: 'proposal_approved', actionType: 'create_task', actionConfig: { taskTitle: 'Retomar proposta', delayDays: 3 } });
+  const lastAutomationCreate = apiCalls[apiCalls.length - 1];
+  check(lastAutomationCreate?.method === 'POST' && lastAutomationCreate?.path === '/api/v1/automations', 'create_automation chama POST /api/v1/automations');
+  check(lastAutomationCreate?.body?.trigger === 'proposal_approved' && lastAutomationCreate?.body?.actionConfig?.delayDays === 3, 'create_automation envia gatilho e actionConfig no body');
+  check(automationCreated.result?.isError === false && automationCreated.result.content[0].text.includes('a2'), 'create_automation devolve a regra criada');
+  const automationPaused = await tool('novacrm_update_automation', { id: 'a2', isActive: false });
+  const lastAutomationUpdate = apiCalls[apiCalls.length - 1];
+  check(lastAutomationUpdate?.method === 'PATCH' && lastAutomationUpdate?.path === '/api/v1/automations/a2' && lastAutomationUpdate?.body?.isActive === false, 'update_automation pausa a regra via PATCH');
+  check(automationPaused.result?.isError === false, 'update_automation devolve a regra atualizada');
+
+  // tools/call — tarefas
+  const tasks = await tool('novacrm_list_tasks', { status: 'pending' });
+  const lastTasks = apiCalls[apiCalls.length - 1];
+  check(lastTasks?.method === 'GET' && lastTasks?.path === '/api/v1/tasks?status=pending', 'list_tasks repassa o filtro de status na query');
+  check(tasks.result?.isError === false && tasks.result.content[0].text.includes('Retornar para Ana'), 'list_tasks devolve as tarefas da API simulada');
+  const taskCreated = await tool('novacrm_create_task', { title: 'Ligar para Bia', dueDate: '2026-10-21', type: 'call', priority: 'high' });
+  const lastTaskCreate = apiCalls[apiCalls.length - 1];
+  check(lastTaskCreate?.method === 'POST' && lastTaskCreate?.path === '/api/v1/tasks', 'create_task chama POST /api/v1/tasks');
+  check(lastTaskCreate?.body?.title === 'Ligar para Bia' && lastTaskCreate?.body?.dueDate === '2026-10-21', 'create_task envia título e vencimento no body');
+  check(taskCreated.result?.isError === false && taskCreated.result.content[0].text.includes('t2'), 'create_task devolve a tarefa criada');
+  const taskDone = await tool('novacrm_complete_task', { id: 't2' });
+  const lastTaskComplete = apiCalls[apiCalls.length - 1];
+  check(lastTaskComplete?.method === 'POST' && lastTaskComplete?.path === '/api/v1/tasks/t2/complete', 'complete_task chama POST /api/v1/tasks/t2/complete');
+  check(taskDone.result?.isError === false && taskDone.result.content[0].text.includes('"completed"'), 'complete_task devolve a tarefa concluída');
+
+  // tools/call — propostas
+  const proposals = await tool('novacrm_list_proposals', { status: 'sent' });
+  const lastProposals = apiCalls[apiCalls.length - 1];
+  check(lastProposals?.method === 'GET' && lastProposals?.path === '/api/v1/proposals?status=sent', 'list_proposals repassa o filtro de status na query');
+  check(proposals.result?.isError === false && proposals.result.content[0].text.includes('Pacote Q4'), 'list_proposals devolve as propostas da API simulada');
+  const proposalCreated = await tool('novacrm_create_proposal', { title: 'Pacote Corporativo', clientName: 'Ana Souza', items: [{ name: 'Licença anual', quantity: 2, unitPrice: 1200 }], discount: 100 });
+  const lastProposalCreate = apiCalls[apiCalls.length - 1];
+  check(lastProposalCreate?.method === 'POST' && lastProposalCreate?.path === '/api/v1/proposals', 'create_proposal chama POST /api/v1/proposals');
+  check(lastProposalCreate?.body?.items?.length === 1 && lastProposalCreate?.body?.discount === 100, 'create_proposal envia itens e desconto no body');
+  check(proposalCreated.result?.isError === false && proposalCreated.result.content[0].text.includes('pr2'), 'create_proposal devolve a proposta criada');
+  const proposalSent = await tool('novacrm_update_proposal', { id: 'pr2', status: 'approved' });
+  const lastProposalUpdate = apiCalls[apiCalls.length - 1];
+  check(lastProposalUpdate?.method === 'PATCH' && lastProposalUpdate?.path === '/api/v1/proposals/pr2' && lastProposalUpdate?.body?.status === 'approved', 'update_proposal muda o status via PATCH');
+  check(proposalSent.result?.isError === false, 'update_proposal devolve a proposta atualizada');
+
+  // tools/call — pipeline (oportunidades)
+  const opportunities = await tool('novacrm_list_opportunities', { stage: 'negotiation' });
+  const lastOpportunities = apiCalls[apiCalls.length - 1];
+  check(lastOpportunities?.method === 'GET' && lastOpportunities?.path === '/api/v1/opportunities?stage=negotiation', 'list_opportunities repassa o filtro de estágio na query');
+  check(opportunities.result?.isError === false && opportunities.result.content[0].text.includes('Upgrade premium'), 'list_opportunities devolve os negócios da API simulada');
+  const opportunityCreated = await tool('novacrm_create_opportunity', { title: 'Upgrade premium', clientName: 'Ana Souza', value: 4500, stage: 'negotiation', probability: 60 });
+  const lastOpportunityCreate = apiCalls[apiCalls.length - 1];
+  check(lastOpportunityCreate?.method === 'POST' && lastOpportunityCreate?.path === '/api/v1/opportunities', 'create_opportunity chama POST /api/v1/opportunities');
+  check(lastOpportunityCreate?.body?.stage === 'negotiation' && lastOpportunityCreate?.body?.value === 4500, 'create_opportunity envia estágio e valor no body');
+  check(opportunityCreated.result?.isError === false && opportunityCreated.result.content[0].text.includes('op2'), 'create_opportunity devolve o negócio criado');
+  const moved = await tool('novacrm_move_opportunity', { id: 'op2', stage: 'won' });
+  const lastMove = apiCalls[apiCalls.length - 1];
+  check(lastMove?.method === 'PATCH' && lastMove?.path === '/api/v1/opportunities/op2/stage' && lastMove?.body?.stage === 'won', 'move_opportunity chama PATCH /api/v1/opportunities/op2/stage');
+  check(moved.result?.isError === false && moved.result.content[0].text.includes('"probability": 100'), 'move_opportunity para won ajusta a probabilidade para 100');
+  const lost = await tool('novacrm_move_opportunity', { id: 'op1', stage: 'lost', lossReason: 'preço' });
+  const lastLost = apiCalls[apiCalls.length - 1];
+  check(lastLost?.body?.lossReason === 'preço', 'move_opportunity para lost envia o motivo da perda');
+  check(lost.result?.isError === false && lost.result.content[0].text.includes('"probability": 0'), 'move_opportunity para lost zera a probabilidade');
+  const opportunityDeleted = await tool('novacrm_delete_opportunity', { id: 'op2' });
+  const lastOpportunityDelete = apiCalls[apiCalls.length - 1];
+  check(lastOpportunityDelete?.method === 'DELETE' && lastOpportunityDelete?.path === '/api/v1/opportunities/op2', 'delete_opportunity chama DELETE /api/v1/opportunities/op2');
+  check(opportunityDeleted.result?.isError === false && opportunityDeleted.result.content[0].text.includes('"permanent": true'), 'delete_opportunity devolve o resultado da exclusão');
 
   // prompts
   const prompts = await call('prompts/list');
