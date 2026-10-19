@@ -29,7 +29,7 @@ const API_KEY = process.env.NOVACRM_API_KEY || '';
 const BASE_URL = (process.env.NOVACRM_BASE_URL || 'https://console.novacrm.com.br/api/v1').replace(/\/+$/, '');
 
 const SERVER_NAME = 'novacrm-mcp-server';
-const SERVER_VERSION = '1.1.0';
+const SERVER_VERSION = '1.1.3';
 const PROTOCOL_VERSION = '2024-11-05';
 
 const ORDER_STATUSES = ['pending_payment', 'new', 'processing', 'completed', 'cancelled'];
